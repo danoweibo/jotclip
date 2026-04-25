@@ -14,10 +14,14 @@ import (
 )
 
 func main() {
-	// Load env
+	// Before
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("Error loading .env file")
 	}
+	fmt.Println("DATABASE_URL:", os.Getenv("DATABASE_URL"))
+
+	// After
+	godotenv.Load() // silently ignore if .env not found
 
 	// Connect to PostgreSQL
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
