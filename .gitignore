@@ -5,3 +5,8 @@
 
 # Commit example files
 !**/.env.example
+
+# Python
+engine/venv/
+**/__pycache__/
+**/*.pyc
