@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"os"
 	"time"
@@ -46,6 +47,19 @@ func (r *R2Client) UploadVideo(ctx context.Context, file multipart.File, filenam
 		return "", fmt.Errorf("failed to upload video: %w", err)
 	}
 
+	return key, nil
+}
+
+func (r *R2Client) UploadFile(ctx context.Context, body io.Reader, key string, contentType string) (string, error) {
+	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(r.bucket),
+		Key:         aws.String(key),
+		Body:        body,
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to upload file: %w", err)
+	}
 	return key, nil
 }
 

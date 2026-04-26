@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"os/exec"
@@ -68,7 +69,61 @@ func (w *TranscodeWorker) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		return fmt.Errorf("ffmpeg failed: %w\nOutput: %s", err, string(output))
 	}
 
-	log.Printf("✅ Transcoding complete for video: %s", payload.VideoID)
+	// Upload all HLS segments and playlist to R2
+	hlsPrefix := fmt.Sprintf("hls/%s", payload.VideoID)
+	if err := w.uploadHLSFiles(ctx, tmpDir, hlsPrefix); err != nil {
+		return fmt.Errorf("failed to upload HLS files: %w", err)
+	}
+
+	log.Printf("✅ Transcoding and HLS upload complete for video: %s", payload.VideoID)
+	log.Printf("📺 HLS playlist key: %s/index.m3u8", hlsPrefix)
+	return nil
+}
+
+func (w *TranscodeWorker) uploadHLSFiles(ctx context.Context, dir string, prefix string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		ext := filepath.Ext(name)
+
+		// Only upload HLS files
+		if ext != ".m3u8" && ext != ".ts" {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+		file, err := os.Open(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to open file %s: %w", name, err)
+		}
+
+		contentType := mime.TypeByExtension(ext)
+		if contentType == "" {
+			if ext == ".m3u8" {
+				contentType = "application/vnd.apple.mpegurl"
+			} else {
+				contentType = "video/mp2t"
+			}
+		}
+
+		key := fmt.Sprintf("%s/%s", prefix, name)
+		_, err = w.r2.UploadFile(ctx, file, key, contentType)
+		file.Close()
+		if err != nil {
+			return fmt.Errorf("failed to upload %s: %w", name, err)
+		}
+
+		log.Printf("⬆️  Uploaded HLS file: %s", key)
+	}
+
 	return nil
 }
 
