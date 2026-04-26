@@ -10,6 +10,8 @@ import (
 
 	enginegrpc "github.com/danoweibo/jotclip/api/internal/grpc"
 	"github.com/danoweibo/jotclip/api/internal/handlers"
+	"github.com/danoweibo/jotclip/api/internal/queue"
+	"github.com/danoweibo/jotclip/api/internal/queue/workers"
 	"github.com/danoweibo/jotclip/api/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -63,12 +65,22 @@ func main() {
 		json.NewEncoder(w).Encode(resp)
 	})
 
+	// Queue client
+	queueClient := queue.NewQueueClient("localhost:6379")
+	defer queueClient.Close()
+	fmt.Println("✅ Queue client initialized")
+
+	
+
 	// inside main(), after Redis setup:
 	r2 := storage.NewR2Client()
 	fmt.Println("✅ R2 storage client initialized")
 
-	videoHandler := handlers.NewVideoHandler(r2)
+	videoHandler := handlers.NewVideoHandler(r2, queueClient)
 	r.Post("/videos/upload", videoHandler.Upload)
+
+	// Start worker server in background
+	go workers.StartWorkerServer("localhost:6379", r2)
 
 	port := os.Getenv("PORT")
 	fmt.Printf("🚀 Jotclip API running on port %s\n", port)

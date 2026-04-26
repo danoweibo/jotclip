@@ -4,19 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/danoweibo/jotclip/api/internal/queue"
 	"github.com/danoweibo/jotclip/api/internal/storage"
+	"github.com/google/uuid"
 )
 
 type VideoHandler struct {
-	r2 *storage.R2Client
+	r2    *storage.R2Client
+	queue *queue.QueueClient
 }
 
-func NewVideoHandler(r2 *storage.R2Client) *VideoHandler {
-	return &VideoHandler{r2: r2}
+func NewVideoHandler(r2 *storage.R2Client, q *queue.QueueClient) *VideoHandler {
+	return &VideoHandler{r2: r2, queue: q}
 }
 
 func (h *VideoHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	// 500MB max
 	r.ParseMultipartForm(500 << 20)
 
 	file, header, err := r.FormFile("video")
@@ -37,7 +39,19 @@ func (h *VideoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get presigned URL for immediate playback
+	videoID := uuid.New().String()
+
+	// Enqueue transcoding job
+	err = h.queue.EnqueueTranscode(r.Context(), queue.TranscodeVideoPayload{
+		VideoKey:  key,
+		VideoID:   videoID,
+		ProjectID: "test-project",
+	})
+	if err != nil {
+		http.Error(w, "Failed to enqueue transcode job", http.StatusInternalServerError)
+		return
+	}
+
 	url, err := h.r2.GetPresignedURL(r.Context(), key)
 	if err != nil {
 		http.Error(w, "Failed to generate URL", http.StatusInternalServerError)
@@ -46,7 +60,8 @@ func (h *VideoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"key": key,
-		"url": url,
+		"video_id": videoID,
+		"key":      key,
+		"url":      url,
 	})
 }
