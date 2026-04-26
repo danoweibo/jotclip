@@ -9,6 +9,8 @@ import (
 	"os"
 
 	enginegrpc "github.com/danoweibo/jotclip/api/internal/grpc"
+	"github.com/danoweibo/jotclip/api/internal/handlers"
+	"github.com/danoweibo/jotclip/api/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
@@ -35,6 +37,8 @@ func main() {
 	}
 	fmt.Println("✅ Redis connected")
 
+	
+
 	// gRPC Engine client
 	engine := enginegrpc.NewEngineClient("localhost:50051")
 	defer engine.Close()
@@ -58,6 +62,13 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	})
+
+	// inside main(), after Redis setup:
+	r2 := storage.NewR2Client()
+	fmt.Println("✅ R2 storage client initialized")
+
+	videoHandler := handlers.NewVideoHandler(r2)
+	r.Post("/videos/upload", videoHandler.Upload)
 
 	port := os.Getenv("PORT")
 	fmt.Printf("🚀 Jotclip API running on port %s\n", port)
