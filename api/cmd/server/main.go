@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 
+	enginegrpc "github.com/danoweibo/jotclip/api/internal/grpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
@@ -14,16 +16,9 @@ import (
 )
 
 func main() {
-	// Before
-	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	fmt.Println("DATABASE_URL:", os.Getenv("DATABASE_URL"))
+	godotenv.Load()
 
-	// After
-	godotenv.Load() // silently ignore if .env not found
-
-	// Connect to PostgreSQL
+	// PostgreSQL
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v", err)
@@ -31,7 +26,7 @@ func main() {
 	defer conn.Close(context.Background())
 	fmt.Println("✅ PostgreSQL connected")
 
-	// Connect to Redis
+	// Redis
 	rdb := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
@@ -39,6 +34,11 @@ func main() {
 		log.Fatalf("Unable to connect to Redis: %v", err)
 	}
 	fmt.Println("✅ Redis connected")
+
+	// gRPC Engine client
+	engine := enginegrpc.NewEngineClient("localhost:50051")
+	defer engine.Close()
+	fmt.Println("✅ Engine gRPC client connected")
 
 	// Router
 	r := chi.NewRouter()
@@ -48,7 +48,17 @@ func main() {
 		w.Write([]byte(`{"status":"ok","service":"jotclip-api"}`))
 	})
 
-	// Start server
+	// Test gRPC endpoint
+	r.Get("/test-engine", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := engine.AnalyzeVideo("test-123", "http://example.com/video.mp4", "", "en")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
 	port := os.Getenv("PORT")
 	fmt.Printf("🚀 Jotclip API running on port %s\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))

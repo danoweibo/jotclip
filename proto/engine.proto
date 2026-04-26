@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package engine;
+
+option go_package = "github.com/yourusername/jotclip/api/internal/grpc/engine";
+
+service EngineService {
+  rpc AnalyzeVideo (AnalyzeVideoRequest) returns (AnalyzeVideoResponse);
+}
+
+message AnalyzeVideoRequest {
+  string video_id = 1;
+  string video_url = 2;
+  string script_text = 3;   // empty if no script uploaded
+  string language = 4;       // detected language of video/script
+}
+
+message AnalyzeVideoResponse {
+  repeated AnnotationEvent annotations = 1;
+}
+
+message AnnotationEvent {
+  int64 timestamp_ms = 1;
+  string type = 2;           // mismatch | missing | comment
+  string severity = 3;       // info | warning | critical
+  string comment = 4;
+  string translation = 5;
+  AnnotationShape shape = 6;
+}
+
+message AnnotationShape {
+  string shape_type = 1;     // rect | arrow | circle
+  float x = 2;
+  float y = 3;
+  float width = 4;
+  float height = 5;
+  string color = 6;
+}
