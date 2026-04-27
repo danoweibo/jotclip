@@ -6,6 +6,8 @@
 # Commit example files
 !**/.env.example
 
+/node_modules
+
 # Python
 engine/venv/
 **/__pycache__/
